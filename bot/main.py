@@ -96,7 +96,12 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if update.message.caption:
         with open(dir_path / "captions.txt", "a") as f:
-            f.write(f"{filename.name}: {update.message.caption}\n")
+            f.write(f"{filename.name}: {update.message.caption}\\n")
+
+    # Detecta caption especial QSL
+    if update.message.caption.strip().lower() == "qsl":
+        with open(dir_path / "qsl_photo.txt", "w") as f:
+            f.write(filename.name)
 
     await update.message.reply_text(f"📷 Photo {count} saved.")
 
