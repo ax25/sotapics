@@ -5,6 +5,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from tools.eqsl_generator.eqsl_generator import generate_eqsls_from_activation
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
