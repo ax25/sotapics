@@ -1,3 +1,4 @@
+
 import os
 import json
 from datetime import datetime
@@ -14,7 +15,6 @@ DATA_DIR = Path("data")
 SESSIONS_FILE = "sessions.json"
 CALLSIGNS_FILE = "callsigns.json"
 
-# Load/save sessions
 def load_json_file(path):
     if Path(path).exists():
         with open(path) as f:
@@ -36,8 +36,8 @@ def get_session_dir(callsign, ref):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Welcome to SOTApics! First, register your callsign using /callsign YOURCALL."
-        "Then use /ref EA3/GI-002 to start uploading activation photos."
+        "Welcome to SOTApics! First, register your callsign using /callsign YOURCALL.\n"
+        "Then use /ref EA3/GI-002 to start uploading activation photos. Use /eqsl to generate eQSLs."
     )
 
 async def callsign(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -97,12 +97,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if update.message.caption:
         with open(dir_path / "captions.txt", "a") as f:
-            f.write(f"{filename.name}: {update.message.caption}\\n")
+            f.write(f"{filename.name}: {update.message.caption}\n")
 
-    # Detecta caption especial QSL
-    if update.message.caption.strip().lower() == "qsl":
-        with open(dir_path / "qsl_photo.txt", "w") as f:
-            f.write(filename.name)
+        if update.message.caption.strip().lower() == "qsl":
+            with open(dir_path / "qsl_photo.txt", "w") as f:
+                f.write(filename.name)
 
     await update.message.reply_text(f"📷 Photo {count} saved.")
 
@@ -112,13 +111,38 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_json_file(SESSIONS_FILE, sessions)
     await update.message.reply_text("Session cancelled.")
 
+async def eqsl(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+
+    if user_id not in sessions:
+        await update.message.reply_text("You must first set a reference with /ref.")
+        return
+
+    session = sessions[user_id]
+    callsign = session["callsign"]
+    sota_ref = session["ref"].replace("/", "-")
+    date_str = datetime.utcnow().strftime("%Y-%m-%d")
+    activation_path = Path("data") / callsign / f"{sota_ref}_{date_str}"
+    output_dir = activation_path / "eqsls"
+
+    try:
+        eqsls = generate_eqsls_from_activation(activation_path, callsign, output_dir)
+        if not eqsls:
+            await update.message.reply_text("No eQSLs were generated.")
+            return
+        await update.message.reply_text(f"📨 Generated {len(eqsls)} eQSLs:")
+        for eqsl_path in eqsls:
+            await update.message.reply_photo(photo=open(eqsl_path, "rb"))
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Error generating eQSLs: {str(e)}")
+
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("callsign", callsign))
     app.add_handler(CommandHandler("ref", ref))
     app.add_handler(CommandHandler("cancel", cancel))
+    app.add_handler(CommandHandler("eqsl", eqsl))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
     print("SOTApics Bot is running...")
