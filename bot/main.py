@@ -9,46 +9,76 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-SESSIONS_FILE = "sessions.json"
 DATA_DIR = Path("data")
+SESSIONS_FILE = "sessions.json"
+CALLSIGNS_FILE = "callsigns.json"
 
-def load_sessions():
-    if Path(SESSIONS_FILE).exists():
-        with open(SESSIONS_FILE) as f:
+# Load/save sessions
+def load_json_file(path):
+    if Path(path).exists():
+        with open(path) as f:
             return json.load(f)
     return {}
 
-def save_sessions(sessions):
-    with open(SESSIONS_FILE, "w") as f:
-        json.dump(sessions, f)
+def save_json_file(path, data):
+    with open(path, "w") as f:
+        json.dump(data, f)
 
-sessions = load_sessions()
+sessions = load_json_file(SESSIONS_FILE)
+callsigns = load_json_file(CALLSIGNS_FILE)
 
-def get_session_dir(user_id, callsign, ref):
+def get_session_dir(callsign, ref):
     date_str = datetime.utcnow().strftime("%Y-%m-%d")
     dir_path = DATA_DIR / callsign / f"{ref.replace('/', '-')}_{date_str}"
     dir_path.mkdir(parents=True, exist_ok=True)
     return dir_path
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Welcome to SOTApics! Use /ref EA3/GI-002 to start uploading activation photos.")
+    await update.message.reply_text(
+        "Welcome to SOTApics! First, register your callsign using /callsign YOURCALL."
+        "Then use /ref EA3/GI-002 to start uploading activation photos."
+    )
+
+async def callsign(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    user_id = str(user.id)
+    args = context.args
+
+    if not args:
+        await update.message.reply_text("Usage: /callsign EA3GNU")
+        return
+
+    callsigns[user_id] = args[0].upper()
+    save_json_file(CALLSIGNS_FILE, callsigns)
+
+    await update.message.reply_text(f"Callsign set: {args[0].upper()} ✅")
 
 async def ref(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
+    user_id = str(update.effective_user.id)
     args = context.args
+
+    if user_id not in callsigns:
+        await update.message.reply_text("Please register your callsign first using /callsign YOURCALL.")
+        return
+
     if not args:
         await update.message.reply_text("Usage: /ref EA3/GI-002")
         return
 
     sota_ref = args[0].upper()
-    callsign = user.username or f"user{user.id}"
-    sessions[str(user.id)] = {"ref": sota_ref, "callsign": callsign}
-    save_sessions(sessions)
+    callsign = callsigns[user_id]
+    sessions[user_id] = {"ref": sota_ref, "callsign": callsign}
+    save_json_file(SESSIONS_FILE, sessions)
 
     await update.message.reply_text(f"Reference set: {sota_ref}. Now send me your activation photos!")
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
+
+    if user_id not in callsigns:
+        await update.message.reply_text("Please register your callsign first using /callsign YOURCALL.")
+        return
+
     if user_id not in sessions:
         await update.message.reply_text("Please start with /ref before sending photos.")
         return
@@ -56,7 +86,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session = sessions[user_id]
     ref = session["ref"]
     callsign = session["callsign"]
-    dir_path = get_session_dir(user_id, callsign, ref)
+    dir_path = get_session_dir(callsign, ref)
 
     photo = update.message.photo[-1]
     file = await photo.get_file()
@@ -73,13 +103,14 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     sessions.pop(user_id, None)
-    save_sessions(sessions)
+    save_json_file(SESSIONS_FILE, sessions)
     await update.message.reply_text("Session cancelled.")
 
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("callsign", callsign))
     app.add_handler(CommandHandler("ref", ref))
     app.add_handler(CommandHandler("cancel", cancel))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
