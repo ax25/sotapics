@@ -3,9 +3,7 @@ import os
 import json
 import requests
 from datetime import datetime
-import sys
 from pathlib import Path
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
@@ -42,30 +40,21 @@ def get_summit_info(ref):
     try:
         parts = ref.strip().upper().split("/")
         if len(parts) != 2 or "-" not in parts[1]:
-            print("⚠️ Formato de referencia incorrecto:", ref)
             return None
-
         association = parts[0]
         region = parts[1].split("-")[0]
         full_url = f"https://api2.sota.org.uk/api/regions/{association}/{region}"
-        print("🔎 Consultando URL:", full_url)
-
         response = requests.get(full_url, timeout=10)
-        print("📡 Código HTTP:", response.status_code)
-
         if response.status_code != 200:
             return None
-
         summits = response.json()
         for summit in summits:
             if summit.get("summitCode", "").upper() == ref.upper():
                 name = summit.get("summitName", "Unknown")
                 alt = summit.get("altM", "?")
-                print("✅ Cima encontrada:", name, alt)
-                return f"⛰️ {name} ({alt} m)"
-        print("❌ Cima no encontrada en respuesta")
-    except Exception as e:
-        print("💥 Error en get_summit_info:", e)
+                return f"⛰️ Summit: {name} ({alt} m)"
+    except Exception:
+        pass
     return None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -105,13 +94,12 @@ async def ref(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sessions[user_id] = {"ref": sota_ref, "callsign": callsign}
     save_json_file(SESSIONS_FILE, sessions)
 
+    reply = [f"Reference set: {sota_ref} ✅"]
     summit_info = get_summit_info(sota_ref)
     if summit_info:
-        reply = f"Reference set: {sota_ref} ✅ {summit_info}"
-    else:
-        reply = f"Reference set: {sota_ref} ✅"
-    
-    await update.message.reply_text(reply)
+        reply.append(summit_info)
+
+    await update.message.reply_text("\n".join(reply))
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
