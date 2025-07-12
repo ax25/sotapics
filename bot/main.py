@@ -1,6 +1,7 @@
 
 import os
 import json
+import requests
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
@@ -11,9 +12,10 @@ from tools.eqsl_generator.eqsl_generator import generate_eqsls_from_activation
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-DATA_DIR = Path("data")
-SESSIONS_FILE = "sessions.json"
-CALLSIGNS_FILE = "callsigns.json"
+BASE_PATH = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_PATH / "data"
+SESSIONS_FILE = BASE_PATH / "sessions.json"
+CALLSIGNS_FILE = BASE_PATH / "callsigns.json"
 
 def load_json_file(path):
     if Path(path).exists():
@@ -33,6 +35,27 @@ def get_session_dir(callsign, ref):
     dir_path = DATA_DIR / callsign / f"{ref.replace('/', '-')}_{date_str}"
     dir_path.mkdir(parents=True, exist_ok=True)
     return dir_path
+
+def get_summit_info(ref):
+    try:
+        parts = ref.strip().upper().split("/")
+        if len(parts) != 2 or "-" not in parts[1]:
+            return None
+        association = parts[0]
+        region = parts[1].split("-")[0]
+        full_url = f"https://api2.sota.org.uk/api/regions/{association}/{region}"
+        response = requests.get(full_url, timeout=10)
+        if response.status_code != 200:
+            return None
+        summits = response.json()
+        for summit in summits:
+            if summit.get("summitCode", "").upper() == ref.upper():
+                name = summit.get("summitName", "Unknown")
+                alt = summit.get("altM", "?")
+                return f"⛰️ Summit: {name} ({alt} m)"
+    except Exception:
+        pass
+    return None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -71,7 +94,12 @@ async def ref(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sessions[user_id] = {"ref": sota_ref, "callsign": callsign}
     save_json_file(SESSIONS_FILE, sessions)
 
-    await update.message.reply_text(f"Reference set: {sota_ref}. Now send me your activation photos!")
+    reply = [f"Reference set: {sota_ref} ✅"]
+    summit_info = get_summit_info(sota_ref)
+    if summit_info:
+        reply.append(summit_info)
+
+    await update.message.reply_text("\n".join(reply))
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
@@ -122,7 +150,7 @@ async def eqsl(update: Update, context: ContextTypes.DEFAULT_TYPE):
     callsign = session["callsign"]
     sota_ref = session["ref"].replace("/", "-")
     date_str = datetime.utcnow().strftime("%Y-%m-%d")
-    activation_path = Path("data") / callsign / f"{sota_ref}_{date_str}"
+    activation_path = DATA_DIR / callsign / f"{sota_ref}_{date_str}"
     output_dir = activation_path / "eqsls"
 
     try:
