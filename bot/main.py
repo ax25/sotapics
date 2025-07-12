@@ -4,9 +4,12 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import os
 import json
+import time
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 from dotenv import load_dotenv
+from typing import Optional        # ← compatible con Python ≤ 3.9
+
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -15,122 +18,181 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
+
 from tools.eqsl_generator.eqsl_generator import generate_eqsls_from_activation
 
+
+# ──────────────────────────────────────────
+# Configuración general
+# ──────────────────────────────────────────
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-BASE_PATH = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_PATH / "data"
+BASE_PATH   = Path(__file__).resolve().parent.parent
+DATA_DIR    = BASE_PATH / "data"
+DATA_DIR.mkdir(exist_ok=True)
+
 SESSIONS_FILE = BASE_PATH / "sessions.json"
 CALLSIGNS_FILE = BASE_PATH / "callsigns.json"
+CACHE_FILE     = DATA_DIR / "summits_cache.json"   # caché SOTA
 
-# ───────────── utilidades json ─────────────
-def load_json_file(path):
-    if Path(path).exists():
+CACHE_TTL = 3600   # 1 hora (s -> segundos)
+
+
+# ──────────────────────────────────────────
+# Utilidades JSON sencillas
+# ──────────────────────────────────────────
+def load_json_file(path: Path):
+    if path.exists():
         with open(path) as f:
-            return json.load(f)
+            try:
+                return json.load(f)
+            except Exception:
+                pass
     return {}
 
-def save_json_file(path, data):
+def save_json_file(path: Path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
         json.dump(data, f)
 
+
 sessions  = load_json_file(SESSIONS_FILE)
 callsigns = load_json_file(CALLSIGNS_FILE)
+cache     = load_json_file(CACHE_FILE)
 
-# ───────────── directorios fotos ───────────
-def get_session_dir(callsign, ref):
+
+# ──────────────────────────────────────────
+# Directorio de sesión (por referencia y fecha)
+# ──────────────────────────────────────────
+def get_session_dir(callsign: str, ref: str) -> Path:
     date_str = datetime.utcnow().strftime("%Y-%m-%d")
     dir_path = DATA_DIR / callsign / f"{ref.replace('/', '-')}_{date_str}"
     dir_path.mkdir(parents=True, exist_ok=True)
     return dir_path
 
-# ───────────── caché de cimas ──────────────
-_CACHE_TTL   = timedelta(hours=1)
-_REGION_CACHE = {}                        # (association, region) -> {ts, summits}
 
+# ──────────────────────────────────────────
+# Descarga (con caché) y búsqueda de cimas
+# ──────────────────────────────────────────
 def _fetch_region(association: str, region: str) -> dict:
-    url = f"https://api2.sota.org.uk/api/regions/{association}/{region}"
-    print("🔎 Consultando URL:", url)
-    r = requests.get(url, timeout=10)
+    """Descarga la lista de cimas de una región y la devuelve como dict mapeado por summitCode."""
+    full_url = f"https://api2.sota.org.uk/api/regions/{association}/{region}"
+    print("🔎 Consultando URL:", full_url)
+
+    r = requests.get(full_url, timeout=10)
     print("📡 Código HTTP:", r.status_code)
-    if r.status_code != 200:
-        raise RuntimeError(f"HTTP {r.status_code}")
-    raw = r.json()
-    if "summits" not in raw:
-        raise RuntimeError("Respuesta sin 'summits'")
-    return {s["summitCode"].upper(): s for s in raw["summits"]}
+    r.raise_for_status()
 
-def _get_region_summits(association: str, region: str) -> dict:
-    key = (association, region)
-    now = datetime.utcnow()
-    entry = _REGION_CACHE.get(key)
-    if entry and now - entry["ts"] < _CACHE_TTL:
-        return entry["summits"]
-    summits = _fetch_region(association, region)
-    _REGION_CACHE[key] = {"ts": now, "summits": summits}
-    return summits
+    data = r.json()               # estructura original
+    summits = {s["summitCode"].upper(): s for s in data.get("summits", [])}
+    return {
+        "timestamp": time.time(),
+        "summits":   summits,
+    }
 
-# ───────────── get_summit_info ─────────────
-def get_summit_info(ref: str) -> str | None:
+
+def get_summit_info(ref: str) -> Optional[str]:
+    """
+    Devuelve string con nombre y altitud de la cima
+    o None si no existe. Usa caché de 1 hora.
+    """
     try:
         parts = ref.strip().upper().split("/")
         if len(parts) != 2 or "-" not in parts[1]:
             return None
-        association = parts[0]
-        region      = parts[1].split("-")[0]
-        summit      = _get_region_summits(association, region).get(ref.upper())
+
+        association = parts[0]             # EA3
+        region      = parts[1].split("-")[0]   # GI
+        region_key  = f"{association}/{region}"
+
+        # ─── Caché ──────────────────────────
+        region_cache = cache.get(region_key)
+        if (
+            region_cache is None
+            or (time.time() - region_cache.get("timestamp", 0)) > CACHE_TTL
+        ):
+            try:
+                region_cache = _fetch_region(association, region)
+                cache[region_key] = region_cache
+                save_json_file(CACHE_FILE, cache)
+                print("💾 Región cacheada:", region_key)
+            except Exception as e:
+                print("⚠️  Fallo al actualizar caché:", e)
+                # si teníamos datos viejos los usamos; si no, devolvemos None
+                if region_cache is None:
+                    return None
+
+        summit_dict = region_cache["summits"]
+        summit = summit_dict.get(ref.upper())
+
         if summit:
-            name = summit.get("name", "Unknown")
+            name = summit.get("name") or summit.get("summitName", "Unknown")
             alt  = summit.get("altM", "?")
             print("✅ Cima encontrada:", name, alt)
             return f"⛰️ {name} ({alt} m)"
-        print("❌ Cima no encontrada en diccionario")
+        else:
+            print("❌ Cima no encontrada en diccionario")
+            return None
+
     except Exception as e:
         print("💥 Error en get_summit_info:", e)
-    return None
+        return None
 
-# ───────────── handlers telegram ───────────
+
+# ──────────────────────────────────────────
+# Handlers Telegram
+# ──────────────────────────────────────────
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Welcome to SOTApics! First, register your callsign using /callsign YOURCALL.\n"
         "Then use /ref EA3/GI-002 to start uploading activation photos. Use /eqsl to generate eQSLs."
     )
 
+
 async def callsign(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    if not context.args:
+    user    = update.effective_user
+    user_id = str(user.id)
+    args    = context.args
+
+    if not args:
         await update.message.reply_text("Usage: /callsign EA3GNU")
         return
-    callsigns[user_id] = context.args[0].upper()
+
+    callsigns[user_id] = args[0].upper()
     save_json_file(CALLSIGNS_FILE, callsigns)
-    await update.message.reply_text(f"Callsign set: {callsigns[user_id]} ✅")
+
+    await update.message.reply_text(f"Callsign set: {args[0].upper()} ✅")
+
 
 async def ref(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
+    args    = context.args
+
     if user_id not in callsigns:
         await update.message.reply_text("Please register your callsign first using /callsign YOURCALL.")
         return
-    if not context.args:
+    if not args:
         await update.message.reply_text("Usage: /ref EA3/GI-002")
         return
 
-    sota_ref = context.args[0].upper()
-    summit_info = get_summit_info(sota_ref)
-
-    if not summit_info:
-        await update.message.reply_text("❌ Error: Referencia SOTA no encontrada.")
-        return                        # no guardamos la sesión
-
-    # guardamos la sesión solo si la cima existe
+    sota_ref = args[0].upper()
     callsign = callsigns[user_id]
     sessions[user_id] = {"ref": sota_ref, "callsign": callsign}
     save_json_file(SESSIONS_FILE, sessions)
-    await update.message.reply_text(f"Reference set: {sota_ref} ✅ {summit_info}")
+
+    summit_info = get_summit_info(sota_ref)
+    if summit_info:
+        reply = f"Reference set: {sota_ref} ✅ {summit_info}"
+    else:
+        reply = f"Error: Referencia SOTA no encontrada ❌"
+
+    await update.message.reply_text(reply)
+
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
+
     if user_id not in callsigns:
         await update.message.reply_text("Please register your callsign first using /callsign YOURCALL.")
         return
@@ -138,23 +200,30 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Please start with /ref before sending photos.")
         return
 
-    session = sessions[user_id]
-    dir_path = get_session_dir(session["callsign"], session["ref"])
+    session   = sessions[user_id]
+    ref       = session["ref"]
+    callsign  = session["callsign"]
+    dir_path  = get_session_dir(callsign, ref)
 
-    photo   = update.message.photo[-1]
-    file    = await photo.get_file()
-    count   = len(list(dir_path.glob("photo_*.jpg"))) + 1
-    fname   = dir_path / f"photo_{count}.jpg"
-    await file.download_to_drive(fname)
+    # última foto de mayor resolución
+    photo = update.message.photo[-1]
+    file  = await photo.get_file()
 
+    count = len(list(dir_path.glob("photo_*.jpg"))) + 1
+    filename = dir_path / f"photo_{count}.jpg"
+    await file.download_to_drive(filename)
+
+    # caption & foto QSL
     if update.message.caption:
         with open(dir_path / "captions.txt", "a") as f:
-            f.write(f"{fname.name}: {update.message.caption}\n")
+            f.write(f"{filename.name}: {update.message.caption}\n")
+
         if update.message.caption.strip().lower() == "qsl":
             with open(dir_path / "qsl_photo.txt", "w") as f:
-                f.write(fname.name)
+                f.write(filename.name)
 
     await update.message.reply_text(f"📷 Photo {count} saved.")
+
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
@@ -162,42 +231,51 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_json_file(SESSIONS_FILE, sessions)
     await update.message.reply_text("Session cancelled.")
 
+
 async def eqsl(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
+
     if user_id not in sessions:
         await update.message.reply_text("You must first set a reference with /ref.")
         return
 
-    session        = sessions[user_id]
-    callsign       = session["callsign"]
-    sota_ref_clean = session["ref"].replace("/", "-")
-    date_str       = datetime.utcnow().strftime("%Y-%m-%d")
-    activation_dir = DATA_DIR / callsign / f"{sota_ref_clean}_{date_str}"
-    output_dir     = activation_dir / "eqsls"
+    session     = sessions[user_id]
+    callsign    = session["callsign"]
+    sota_ref    = session["ref"].replace("/", "-")
+    date_str    = datetime.utcnow().strftime("%Y-%m-%d")
+    activation_path = DATA_DIR / callsign / f"{sota_ref}_{date_str}"
+    output_dir      = activation_path / "eqsls"
 
     try:
-        eqsls = generate_eqsls_from_activation(activation_dir, callsign, output_dir)
+        eqsls = generate_eqsls_from_activation(activation_path, callsign, output_dir)
         if not eqsls:
             await update.message.reply_text("No eQSLs were generated.")
             return
-        await update.message.reply_text(f"📨 Generated {len(eqsls)} eQSLs:")
-        for path in eqsls:
-            await update.message.reply_photo(photo=open(path, "rb"))
-    except Exception as e:
-        await update.message.reply_text(f"⚠️ Error generating eQSLs: {e}")
 
-# ───────────── main() ─────────────
+        await update.message.reply_text(f"📨 Generated {len(eqsls)} eQSLs:")
+        for eqsl_path in eqsls:
+            await update.message.reply_photo(photo=open(eqsl_path, "rb"))
+
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Error generating eQSLs: {str(e)}")
+
+
+# ──────────────────────────────────────────
+# Lanzador
+# ──────────────────────────────────────────
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
+
+    app.add_handler(CommandHandler("start",    start))
     app.add_handler(CommandHandler("callsign", callsign))
-    app.add_handler(CommandHandler("ref", ref))
-    app.add_handler(CommandHandler("cancel", cancel))
-    app.add_handler(CommandHandler("eqsl", eqsl))
+    app.add_handler(CommandHandler("ref",      ref))
+    app.add_handler(CommandHandler("cancel",   cancel))
+    app.add_handler(CommandHandler("eqsl",     eqsl))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
-    print("SOTApics Bot is running...")
+    print("SOTApics Bot is running…")
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
