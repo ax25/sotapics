@@ -57,15 +57,14 @@ def get_summit_info(ref):
             return None
 
         summits = response.json()
-        summit = summits.get(ref.upper())
+        for summit in summits:
+            if summit.get("summitCode", "").upper() == ref.upper():
+                name = summit.get("summitName", "Unknown")
+                alt = summit.get("altM", "?")
+                print("✅ Cima encontrada:", name, alt)
+                return f"⛰️ {name} ({alt} m)"
 
-        if summit:
-            name = summit.get("summitName", "Unknown")
-            alt = summit.get("altM", "?")
-            print("✅ Cima encontrada:", name, alt)
-            return f"⛰️ {name} ({alt} m)"
-        else:
-            print("❌ Cima no encontrada en diccionario")
+        print("❌ Cima no encontrada en la lista")
     except Exception as e:
         print("💥 Error en get_summit_info:", e)
     return None
