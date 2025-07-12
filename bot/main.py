@@ -1,4 +1,3 @@
-
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -39,36 +38,58 @@ def get_session_dir(callsign, ref):
     dir_path.mkdir(parents=True, exist_ok=True)
     return dir_path
 
+# ────────────────────────────────────────────────────────────
+#  🔧  FUNCIÓN CORREGIDA  🔧
+# ────────────────────────────────────────────────────────────
+_REGION_CACHE = {}   # (association, region)  →  dict con la respuesta JSON
+
 def get_summit_info(ref):
+    """
+    Devuelve una cadena ⛰️ Nombre (alt m) ó None si no se encuentra la cima.
+    Maneja el JSON real de la API (lista dentro de 'summits') y cachea la región.
+    """
     try:
-        parts = ref.strip().upper().split("/")
+        ref = ref.strip().upper()
+        # Validación mínima del formato EA3/GI-014
+        parts = ref.split("/")
         if len(parts) != 2 or "-" not in parts[1]:
             return None
 
-        association = parts[0]
-        region = parts[1].split("-")[0]
-        full_url = f"https://api2.sota.org.uk/api/regions/{association}/{region}"
-        print("🔎 Consultando URL:", full_url)
+        association = parts[0]                 # EA3
+        region     = parts[1].split("-")[0]    # GI
 
-        response = requests.get(full_url, timeout=10)
-        print("📡 Código HTTP:", response.status_code)
+        cache_key = (association, region)
+        if cache_key not in _REGION_CACHE:
+            full_url = f"https://api2.sota.org.uk/api/regions/{association}/{region}"
+            print("🔎 Consultando URL:", full_url)
+            response = requests.get(full_url, timeout=10)
+            print("📡 Código HTTP:", response.status_code)
+            if response.status_code != 200:
+                return None
+            _REGION_CACHE[cache_key] = response.json()
 
-        if response.status_code != 200:
-            return None
+        region_json = _REGION_CACHE[cache_key]
+        summit_list = region_json.get("summits", [])
 
-        summits = response.json()
-        summit = summits.get(ref.upper())
+        summit = next(
+            (s for s in summit_list if s.get("summitCode", "").upper() == ref),
+            None
+        )
 
         if summit:
-            name = summit.get("summitName", "Unknown")
-            alt = summit.get("altM", "?")
+            # El API usa clave "name"; PEP por compatibilidad con otros JSON que
+            # pudieran llevar "summitName".
+            name = summit.get("name") or summit.get("summitName", "Unknown")
+            alt  = summit.get("altM") or summit.get("alt", "?")
             print("✅ Cima encontrada:", name, alt)
             return f"⛰️ {name} ({alt} m)"
         else:
             print("❌ Cima no encontrada en diccionario")
     except Exception as e:
         print("💥 Error en get_summit_info:", e)
+
     return None
+# ────────────────────────────────────────────────────────────
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
