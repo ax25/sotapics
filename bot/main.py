@@ -4,6 +4,7 @@ import json
 import requests
 from datetime import datetime
 from pathlib import Path
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
