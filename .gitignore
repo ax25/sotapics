@@ -9,3 +9,5 @@ frontend/node_modules/
 
 # (opcional) ignora lockfile si no lo quieres trackear
 # frontend/package-lock.json
+
+frontend/dist
