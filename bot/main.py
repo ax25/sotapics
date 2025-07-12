@@ -42,21 +42,30 @@ def get_summit_info(ref):
     try:
         parts = ref.strip().upper().split("/")
         if len(parts) != 2 or "-" not in parts[1]:
+            print("⚠️ Formato de referencia incorrecto:", ref)
             return None
+
         association = parts[0]
         region = parts[1].split("-")[0]
         full_url = f"https://api2.sota.org.uk/api/regions/{association}/{region}"
+        print("🔎 Consultando URL:", full_url)
+
         response = requests.get(full_url, timeout=10)
+        print("📡 Código HTTP:", response.status_code)
+
         if response.status_code != 200:
             return None
+
         summits = response.json()
         for summit in summits:
             if summit.get("summitCode", "").upper() == ref.upper():
                 name = summit.get("summitName", "Unknown")
                 alt = summit.get("altM", "?")
-                return f"⛰️ Summit: {name} ({alt} m)"
-    except Exception:
-        pass
+                print("✅ Cima encontrada:", name, alt)
+                return f"⛰️ {name} ({alt} m)"
+        print("❌ Cima no encontrada en respuesta")
+    except Exception as e:
+        print("💥 Error en get_summit_info:", e)
     return None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
