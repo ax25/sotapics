@@ -28,8 +28,10 @@ from tools.eqsl_generator.eqsl_generator import generate_eqsls_from_activation
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-BASE_PATH   = Path(__file__).resolve().parent.parent
-DATA_DIR    = BASE_PATH / "data"
+# Paths -----------------------------------------------------------------
+BASE_PATH          = Path(__file__).resolve().parent.parent          # /sotapics
+DATA_DIR           = BASE_PATH / "data"                              # (se sigue usando para JSON)
+PUBLIC_PHOTO_ROOT  = BASE_PATH / "frontend" / "public" / "photos"    # << NUEVO
 DATA_DIR.mkdir(exist_ok=True)
 
 SESSIONS_FILE = BASE_PATH / "sessions.json"
@@ -66,8 +68,14 @@ cache     = load_json_file(CACHE_FILE)
 # Directorio de sesión (por referencia y fecha)
 # ──────────────────────────────────────────
 def get_session_dir(callsign: str, ref: str) -> Path:
+    """
+    Where a user’s photos for *this* activation will be written, e.g.:
+
+    frontend/public/photos/EA3GNU/EA2-HU-064_2025-07-12/
+    """
     date_str = datetime.utcnow().strftime("%Y-%m-%d")
-    dir_path = DATA_DIR / callsign / f"{ref.replace('/', '-')}_{date_str}"
+    slug     = f"{ref.replace('/', '-')}_{date_str}"     # EA2-HU-064_2025-07-12
+    dir_path = PUBLIC_PHOTO_ROOT / callsign.upper() / slug
     dir_path.mkdir(parents=True, exist_ok=True)
     return dir_path
 
