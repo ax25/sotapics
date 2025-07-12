@@ -35,7 +35,7 @@ callsigns = load_json_file(CALLSIGNS_FILE)
 
 def get_session_dir(callsign, ref):
     date_str = datetime.utcnow().strftime("%Y-%m-%d")
-    dir_path = DATA_DIR / callsign / f'{ref.replace("/", "-")}_{date_str}'
+    dir_path = DATA_DIR / callsign / f"{ref.replace("/", "-")}_{date_str}"
     dir_path.mkdir(parents=True, exist_ok=True)
     return dir_path
 
@@ -57,14 +57,15 @@ def get_summit_info(ref):
             return None
 
         summits = response.json()
-        for summit in summits:
-            if summit.get("summitCode", "").upper() == ref.upper():
-                name = summit.get("summitName", "Unknown")
-                alt = summit.get("altM", "?")
-                print("✅ Cima encontrada:", name, alt)
-                return f"⛰️ {name} ({alt} m)"
+        summit = summits.get(ref.upper())
 
-        print("❌ Cima no encontrada en la lista")
+        if summit:
+            name = summit.get("summitName", "Unknown")
+            alt = summit.get("altM", "?")
+            print("✅ Cima encontrada:", name, alt)
+            return f"⛰️ {name} ({alt} m)"
+        else:
+            print("❌ Cima no encontrada en diccionario")
     except Exception as e:
         print("💥 Error en get_summit_info:", e)
     return None
