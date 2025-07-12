@@ -214,11 +214,12 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await file.download_to_drive(filename)
 
     # dentro de handle_photo() después de guardar la imagen
+    '''
     files = {"file": open(filename, "rb")}
     data  = {"callsign": callsign, "ref": ref}
     requests.post("http://127.0.0.1:8000/api/photo",
                   data=data, files=files, timeout=5)
-
+    '''
 
     # caption & foto QSL
     if update.message.caption:
