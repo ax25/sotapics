@@ -96,12 +96,13 @@ async def ref(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sessions[user_id] = {"ref": sota_ref, "callsign": callsign}
     save_json_file(SESSIONS_FILE, sessions)
 
-    reply = [f"Reference set: {sota_ref} ✅"]
     summit_info = get_summit_info(sota_ref)
     if summit_info:
-        reply.append(summit_info)
-
-    await update.message.reply_text("\n".join(reply))
+        reply = f"Reference set: {sota_ref} ✅ {summit_info}"
+    else:
+        reply = f"Reference set: {sota_ref} ✅"
+    
+    await update.message.reply_text(reply)
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
