@@ -3,6 +3,7 @@ import os
 import json
 import requests
 from datetime import datetime
+import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from dotenv import load_dotenv
