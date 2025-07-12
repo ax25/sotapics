@@ -35,7 +35,7 @@ callsigns = load_json_file(CALLSIGNS_FILE)
 
 def get_session_dir(callsign, ref):
     date_str = datetime.utcnow().strftime("%Y-%m-%d")
-    dir_path = DATA_DIR / callsign / f"{ref.replace("/", "-")}_{date_str}"
+    dir_path = DATA_DIR / callsign / f'{ref.replace("/", "-")}_{date_str}'
     dir_path.mkdir(parents=True, exist_ok=True)
     return dir_path
 
