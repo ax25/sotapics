@@ -113,4 +113,4 @@ If a reference is not found the bot replies **“Error: SOTA reference not found
 
 ## 8 · License
 
-MIT © 2025 [ax25](https://github.com/ax25) – Happy SOTA activating! 🏞️📻
+**GNU General Public License v3.0** © 2025 [ax25](https://github.com/ax25) – Happy SOTA activating! 🏞️📻
