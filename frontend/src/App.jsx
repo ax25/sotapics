@@ -1,25 +1,26 @@
-import React, { useEffect, useState } from "react";
-import ActivationsList from "./ActivationsList";
-import "./App.css";
+// src/App.jsx
+import React, { useState, useEffect } from 'react';
+import ActivationList from './components/ActivationList';
+import './index.css';
 
 export default function App() {
   const [activations, setActivations] = useState([]);
+  const callsign = 'EA3GNU'; // dinámico según sesión/bot
 
   useEffect(() => {
-    fetch("/src/demo-activations.json")
-      .then((res) => res.json())
-      .then(setActivations)
-      .catch(console.error);
+    // Ejemplo: cargar JSON local o fetch a tu backend
+    import('./demo-activations.json').then(m => setActivations(m.default));
   }, []);
 
   return (
-    <main className="container">
-      <h1 className="text-3xl font-bold mb-6">EA3GNU Activations</h1>
-      {activations.length > 0 ? (
-        <ActivationsList activations={activations} />
-      ) : (
-        <p>Loading...</p>
-      )}
-    </main>
+    <div className="app">
+      <header className="app-header">
+        <h1>{callsign}</h1>
+        <p>Total SOTA points: {/* aquí sumas puntos */}</p>
+      </header>
+      <main>
+        <ActivationList activations={activations} />
+      </main>
+    </div>
   );
 }

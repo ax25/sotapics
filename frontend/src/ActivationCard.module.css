@@ -1,0 +1,9 @@
+.activation-card {
+  @apply bg-white rounded-lg overflow-hidden shadow-lg;
+}
+.activation-card__header {
+  @apply bg-white/75 px-4 py-2 backdrop-blur;
+}
+.activation-card__footer {
+  @apply flex justify-between px-4 py-2 bg-gray-50;
+}

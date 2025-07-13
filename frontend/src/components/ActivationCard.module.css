@@ -1,0 +1,58 @@
+/* src/components/ActivationCard.module.css */
+.card {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  margin-bottom: 24px;
+  background: #fff;
+}
+
+.topStripe {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  background: rgba(255, 255, 255, 0.85);
+  padding: 12px 16px;
+}
+
+.topStripe h2 {
+  margin: 0;
+  font-family: 'Segoe UI', sans-serif;
+  font-size: 1.5rem;
+  color: #333;
+}
+
+.elevation {
+  font-size: 1rem;
+  color: #666;
+  margin-left: 8px;
+}
+
+.photoContainer {
+  width: 100%;
+  height: 200px;
+  background: #eee;
+}
+
+.photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.bottomStripe {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 12px 16px;
+  font-size: 0.9rem;
+  color: #444;
+}
+
+.leftInfo, .rightInfo {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}

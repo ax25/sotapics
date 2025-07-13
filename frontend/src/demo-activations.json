@@ -1,0 +1,29 @@
+[
+  {
+    "callsign": "EA3GNU",
+    "date": "2025-07-12",
+    "ref": "EA2/HU-064",
+    "name": "Peña Oroel",
+    "elevation": 1769,
+    "points": 6,
+    "qsos": 31,
+    "photos": [
+      "photo_1.jpg",
+      "photo_2.jpg",
+      "photo_3.jpg"
+    ]
+  },
+  {
+    "callsign": "EA4HIH",
+    "date": "2025-04-21",
+    "ref": "EA3/GI-027",
+    "name": "Mare de Déu del Mont",
+    "elevation": 1124,
+    "points": 2,
+    "qsos": 18,
+    "photos": [
+      "photo_1.jpg",
+      "photo_2.jpg"
+    ]
+  }
+]
